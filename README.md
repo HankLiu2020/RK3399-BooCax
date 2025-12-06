@@ -2,6 +2,16 @@
 
 **作者：** HankLiu2020
 
+---
+
+## 🔔 更新日志
+
+| 日期 | 更新内容 |
+|------|---------|
+| 2025.12.5 | 更新了DTB，实现支持蓝牙和 WiFi🎉<br>新的文件上传在`251206wifi_dtb`文件夹 |
+
+---
+
 ## 📦 资源下载
 
 本文中提到的所有资源文件（原厂镜像、目标系统、工具等）已打包上传：
@@ -219,12 +229,13 @@ Unpack completed.
 
 **2. 替换 DTB 文件：**
 
-使用 **resource_tool（MIK工具）** 解包 `resource.img`（即 `second.img`），会得到包含两张图片和一个 DTB 的文件夹。
+使用 **resource_tool（MIK工具）** 解包 `boot.img`，会得到包含两张图片和一个 DTB 的文件夹`second`。
+*注意：在使用MIK工具解包前，需要给`second.img`改名为`resource.img`然后再解包、替换、打包，才能改回`second.img`
 
 操作步骤：
 1. 将上一步生成的 `new_nano-rk3399.dtb` 重命名为 `rk-kernel.dtb`
 2. 替换 resource 文件夹中的 DTB 文件
-3. 使用 resource_tool 重新打包为 `second.img`
+3. 使用 resource_tool(MIK工具) 原模原样重新打包为 `boot.img`
 
 ![MIK工具打包](images/image_8.png)
 
@@ -283,12 +294,11 @@ boot_new.img has been created.
 - USB 3.0 接口
 - USB 2.0 接口
 - HDMI 显示输出
+- 2.4G/5G WiFi
+- 蓝牙
 
 **⚠️ 待改进：**
 - 双网口均识别为 `eth0`（推测硬件上可能是交换机架构）
-
-**⚠️ 待测试：**
-- 2.4G WiFi 和蓝牙在 boot 时加载成功，但功能还有待测试
 
 
 ### 系统截图
@@ -301,11 +311,17 @@ boot_new.img has been created.
 
 ---
 
+## 系统优化
+### 固定MAC地址
+在 ARM 裸机 Ubuntu 20.04 上，用 
+```nmcli connection modify "Wired connection 1" 802-3-ethernet.cloned-mac-address <MAC> ```写死 MAC，重启不再跳。
+执行```(sleep 10 && sudo nmcli connection up "Wired connection 1") &```之后再执行```nmcli connection down "Wired connection 1" && nmcli connection up "Wired connection 1"``` 
+秒级生效，SSH 会话基本不掉。
+
 ## 后续改进方向
 
 - 解决双网口识别问题，是否可以实现独立的 eth0 和 eth1？
-- 完善 ramdisk 的提取和打包流程
-- 测试更多外设功能（音频、HDMI-IN 等）
+- 测试更多外设功能（音频 等）
 
 如果你也在折腾类似的开发板，欢迎参考本文思路进行适配。有任何问题或改进建议，欢迎交流讨论！
 
