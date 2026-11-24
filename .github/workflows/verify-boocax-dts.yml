@@ -1,0 +1,69 @@
+name: Verify BooCax C50 legacy device tree
+
+on:
+  push:
+    branches: [codex/boocax-boot-verification]
+    paths:
+      - '.github/workflows/verify-boocax-dts.yml'
+      - '251206wifi_dtb/**'
+      - 'dtb_dts_replace/rk3399-excavator - original.dts'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Prepare DTC 1.7.2
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bison flex
+          curl --fail --silent --show-error --location --retry 3 \
+            https://www.kernel.org/pub/software/utils/dtc/dtc-1.7.2.tar.xz \
+            -o "$RUNNER_TEMP/dtc.tar.xz"
+          echo "92d8ca769805ae1f176204230438fe52808f4e1c7944053c9eec0e649b237539  $RUNNER_TEMP/dtc.tar.xz" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/dtc.tar.xz" -C "$RUNNER_TEMP"
+          make -C "$RUNNER_TEMP/dtc-1.7.2" -j2 NO_PYTHON=1 NO_YAML=1 dtc
+      - name: Reproduce the factory and deployed device trees
+        shell: bash
+        run: |
+          dtc="$RUNNER_TEMP/dtc-1.7.2/dtc"
+          "$dtc" --version
+          mkdir -p checks
+          "$dtc" -I dts -O dtb -o checks/factory.dtb \
+            'dtb_dts_replace/rk3399-excavator - original.dts' 2>checks/factory-warnings.log
+          echo '5b11ada62addb6cdeead9685b41c112cf0c470b71d11c0b6559e485086ce69f1  checks/factory.dtb' | sha256sum --check
+          "$dtc" -I dts -O dtb -o checks/deployed.dtb \
+            251206wifi_dtb/rk3399-boocax.dts 2>checks/deployed-warnings.log
+          cmp checks/deployed.dtb 251206wifi_dtb/rk-kernel.dtb
+          echo 'd2e27d5d24404f29e2df7838d804e31ef864c82a9d8362f05bb9668861e78080  checks/deployed.dtb' | sha256sum --check
+      - name: Build and verify the named legacy candidate
+        shell: bash
+        run: |
+          dtc="$RUNNER_TEMP/dtc-1.7.2/dtc"
+          source=251206wifi_dtb/rk3399-boocax.dts
+          name=rk3399-boocax-c50-legacy
+          test "$(grep -Fc 'model = "nano-rk3399";' "$source")" -eq 1
+          mkdir -p artifact
+          sed 's/model = "nano-rk3399";/model = "BooCax C50 V1.0";/' "$source" > "artifact/$name.dts"
+          "$dtc" -I dts -O dtb -o "artifact/$name.dtb" "artifact/$name.dts" 2>checks/candidate-warnings.log
+          "$dtc" -q -q -I dtb -O dts -o checks/deployed.dts checks/deployed.dtb
+          "$dtc" -q -q -I dtb -O dts -o checks/candidate.dts "artifact/$name.dtb"
+          grep -F 'model = "BooCax C50 V1.0";' checks/candidate.dts
+          sed 's/model = "BooCax C50 V1.0";/model = "nano-rk3399";/' checks/candidate.dts > checks/candidate-normalized.dts
+          diff -u checks/deployed.dts checks/candidate-normalized.dts
+          cp checks/*-warnings.log artifact/
+          cd artifact
+          sha256sum "$name.dts" "$name.dtb" > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: boocax-c50-legacy-dts-dtb
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 7
