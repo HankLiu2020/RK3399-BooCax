@@ -1,0 +1,65 @@
+name: Build BooCax C50 U-Boot
+
+on:
+  push:
+    branches: [codex/boocax-boot-verification]
+    paths:
+      - 'firmware/boocax-c50/**'
+      - '.github/workflows/build-boocax-uboot.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deployed-firmware:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify the three deployed boot stages
+        shell: bash
+        run: |
+          archive=firmware/boocax-c50/known-working/boot-components.zip
+          echo "91a848064c563ecf9dbb2c72f46291d41a8bcac286f2884d831bd47d909cc74e  $archive" | sha256sum --check
+          mkdir deployed
+          unzip -q "$archive" 'idbloader.bin' 'uboot.img' 'trust.img' -d deployed
+          cd deployed
+          sha256sum --check <<'SUMS'
+          f0c676323dd4a7eb598ece4b3e0f66aa103e164eb4b24ec9b7c9aeb78e258e06  idbloader.bin
+          19b79140c3b2702222aa7f86e547911d4870d3d00d2d887da3607f15b3c2666b  uboot.img
+          5e77f0ecebeb6ed739c90361d59b3f4d36f92f4fdac12e1915e6b7af7f80fd2b  trust.img
+          SUMS
+  compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install Arm64 and U-Boot build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu bc bison flex libssl-dev libgnutls28-dev \
+            libncurses-dev libfdt-dev device-tree-compiler swig python3-dev \
+            python3-setuptools python3-pyelftools python3-pycryptodome \
+            python3-jsonschema python3-yaml lz4 xz-utils
+      - name: Check out pinned U-Boot
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: u-boot/u-boot
+          ref: 5508406582f6f7120dce0c4b3059819a41788db2
+          path: upstream
+          persist-credentials: false
+      - name: Build and inspect the lab candidate
+        shell: bash
+        run: |
+          export PATH="/usr/bin:$PATH"
+          bash firmware/boocax-c50/build-uboot.sh upstream "$RUNNER_TEMP/boot-artifact"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: boocax-c50-uboot-v2026.10-lab
+          path: ${{ runner.temp }}/boot-artifact/
+          if-no-files-found: error
+          retention-days: 14
