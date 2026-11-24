@@ -53,7 +53,11 @@ test "$(fdtget -t s u-boot.dtb / model)" = 'BooCax C50 V1.0'
 test "$(fdtget -t s u-boot.dtb /chosen stdout-path)" = 'serial2:1500000n8'
 test "$(fdtget -t s u-boot.dtb /i2c@ff3c0000/pmic@1c compatible)" = 'rockchip,rk818'
 tools/dumpimage -l u-boot.itb | tee "$output/fit-contents.txt"
-grep -qi 'arm-trusted-firmware' "$output/fit-contents.txt"
+default_config="$(fdtget -t s u-boot.itb /configurations default)"
+firmware_node="$(fdtget -t s u-boot.itb "/configurations/$default_config" firmware)"
+test "$(fdtget -t s u-boot.itb "/images/$firmware_node" os)" = 'arm-trusted-firmware'
+test "$(fdtget -t s u-boot.itb "/configurations/$default_config" description)" = \
+    'rockchip/rk3399-boocax-c50.dtb'
 cp u-boot-rockchip.bin idbloader.img u-boot.itb u-boot.dtb "$output/"
 cp .config "$output/uboot.config"
 cp Licenses/README "$output/README-uboot-licenses"
